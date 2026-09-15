@@ -1,0 +1,147 @@
+\documentclass[12pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{setspace}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\setstretch{1.2}
+
+\title{Risk Unwind: A Systematic Framework for Detecting and Mitigating Portfolio Risk Exceptions}
+\author{Olivia Ye}
+\date{Fall 2026}
+
+\begin{document}
+\maketitle
+Note: this is a template from econ 
+
+\section{Introduction}
+Programming languages already have a mature, well-defined way of dealing with failure. They do so by raising an exception, which is matched to a handler, and resolved. If nothing can handle it, it will stop and escalate. Financial risk management mostly does this by hand or by computing thousands of scenarios each night to potentially catch what is wrong. 
+Thus, this project aims to builds a system that does it the way a runtime does in computer science, and apply it to financial risk management.
+
+
+\textbf{Main goal:} To 
+\textbf{Testable hypothesis:} If tech expansion raised demand for centrally located housing, non-tech workers should have moved farther from downtown relative to tech workers after 2010.
+
+\section{Motivation}
+\begin{itemize}[leftmargin=*]
+\item San Francisco's technology boom is often linked to rising housing pressures and distributional concerns.
+\item A spatial lens (distance from downtown) helps quantify whether potential displacement appears in where different worker groups live.
+\item This question is policy relevant for housing affordability, commuting burdens, and local labor market inequality.
+\end{itemize}
+
+\section{Literature Context}
+\begin{itemize}[leftmargin=*]
+\item Existing work studies gentrification, wage polarization, and sector-specific housing demand, but often without directly comparing tech and non-tech within-city spatial outcomes.
+\item This project contributes a worker-group comparison using repeated cross-sections and a difference-in-differences framework.
+\item The paper also includes robustness checks using pre-period placebo tests and cross-city exposure comparisons.
+\end{itemize}
+
+\section{Setting and Data}
+\textbf{Data sources:}
+\begin{itemize}[leftmargin=*]
+\item IPUMS USA microdata (person-level records, 2005--2020 extract).
+\item U.S. Census TIGER/Line PUMA shapefiles (for constructing location-based distance measures).
+\end{itemize}
+
+\textbf{Files to reference in this section:}
+\begin{itemize}[leftmargin=*]
+\item Data/source notes: \texttt{README.md}, \texttt{docs/data\_notes.txt}
+\item Data pipeline script: \texttt{scripts/main/project.py}
+\item Shared helper functions (loading, weighting, distance functions): \texttt{scripts/main/analysis\_funcs.py}
+\item Processed SF analysis dataset built by pipeline: \texttt{data/processed/sf\_with\_distance.csv}
+\end{itemize}
+
+\textbf{Sample and variables:}
+\begin{itemize}[leftmargin=*]
+\item Baseline SF DiD sample: 7,074 observations (2010 and 2020).
+\item Outcome: distance in miles from a downtown San Francisco reference point (Market \& Montgomery).
+\item Treatment dimensions: tech vs non-tech occupation group; pre vs post period.
+\item Controls: age and education.
+\end{itemize}
+
+\section{Methodology}
+\subsection*{Baseline identification strategy}
+\begin{itemize}[leftmargin=*]
+\item Difference-in-differences (DiD): compare non-tech vs tech workers before and after 2010.
+\item Key estimand: interaction term for group $\times$ post period.
+\end{itemize}
+
+\[
+\text{Distance}_{it} = \alpha + \beta_1\text{NonTech}_i + \beta_2\text{Post}_t + \beta_3(\text{NonTech}_i\times\text{Post}_t) + X_i'\gamma + \varepsilon_{it}
+\]
+
+\subsection*{Threats and checks}
+\begin{itemize}[leftmargin=*]
+\item Parallel-trends concern addressed via pre-period event-style interactions (2005--2010) and placebo DiD.
+\item External validity check using city-level high- vs low-tech exposure comparisons and triple-difference specification.
+\end{itemize}
+
+\subsection*{Methods-to-code map (what file corresponds to each step)}
+\begin{itemize}[leftmargin=*]
+\item Build cleaned SF person-level analysis data with distance outcome:
+\\ \texttt{scripts/main/project.py} $\rightarrow$ \texttt{data/processed/sf\_with\_distance.csv}
+\item Estimate baseline SF DiD (2010 vs 2020, tech vs non-tech):
+\\ \texttt{scripts/main/project1\_did.py} $\rightarrow$ \texttt{outputs/did/did\_regression\_summary.txt}
+\item Plot baseline SF DiD group trend figure:
+\\ \texttt{scripts/main/project1\_did.py} $\rightarrow$ \texttt{outputs/did/did\_distance\_trends.png}
+\item Build pre-period panel for placebo/parallel-trend tests (2005--2010):
+\\ \texttt{scripts/main/project2\_time.py}
+\item Run placebo DiD and pre-period year-interaction tests:
+\\ \texttt{scripts/main/project2\_time\_did.py} $\rightarrow$ \texttt{outputs/pretrend\_sf/placebo\_regression\_summary.txt}, \texttt{outputs/pretrend\_sf/pretrend\_year\_interactions\_summary.txt}
+\item Plot pre-period trend-check figure:
+\\ \texttt{scripts/main/project2\_time\_did.py} $\rightarrow$ \texttt{outputs/pretrend\_sf/sf\_pretrend\_2005\_2010.png}
+\item Plot long-run SF trend figure (2005--2020):
+\\ \texttt{scripts/main/project2\_time\_2005\_2020\_trend.py} $\rightarrow$ \texttt{outputs/pretrend\_sf/sf\_distance\_tech\_nontech\_2005\_2020.png}
+\item Build city-level tech-exposure classification and panel:
+\\ \texttt{scripts/main/project2\_exposure.py} $\rightarrow$ \texttt{outputs/city\_exposure/city\_tech\_share\_classification.png}
+\item Estimate exposure DiD and triple-difference robustness:
+\\ \texttt{scripts/main/project2\_exposure\_did.py} $\rightarrow$ \texttt{outputs/city\_exposure/nontech\_exposure\_did\_regression\_summary.txt}, \texttt{outputs/city\_exposure/triple\_diff\_exposure\_summary.txt}
+\item Plot non-tech high-vs-low exposure trend figure:
+\\ \texttt{scripts/main/project2\_exposure\_did.py} $\rightarrow$ \texttt{outputs/city\_exposure/nontech\_high\_low\_exposure\_trend.png}
+\end{itemize}
+
+\section{Results Plan / Current Findings}
+\begin{itemize}[leftmargin=*]
+\item \textbf{Baseline SF DiD (2010--2020):} interaction estimate $\hat\beta_3=-0.478$ (SE 0.775, $p=0.538$), not statistically significant.
+\item \textit{Reference files:}
+\\ Regression table: \texttt{outputs/did/did\_regression\_summary.txt}
+\\ Figure: \texttt{outputs/did/did\_distance\_trends.png}
+\\ Generated by: \texttt{scripts/main/project1\_did.py}
+\item \textbf{Pre-period placebo (2005--2010):} interaction estimate $-1.197$ (SE 0.683, $p=0.080$), suggestive but not significant at 5\%.
+\item \textit{Reference files:}
+\\ Regression output: \texttt{outputs/pretrend\_sf/placebo\_regression\_summary.txt}
+\\ Figure: \texttt{outputs/pretrend\_sf/sf\_pretrend\_2005\_2010.png}
+\\ Generated by: \texttt{scripts/main/project2\_time\_did.py}
+\item \textbf{Pretrend interactions:} most year-by-treatment interactions are not statistically significant.
+\item \textit{Reference files:}
+\\ Regression output: \texttt{outputs/pretrend\_sf/pretrend\_year\_interactions\_summary.txt}
+\\ Generated by: \texttt{scripts/main/project2\_time\_did.py}
+\item \textbf{Cross-city exposure DiD:} post$\times$high-exposure estimate is positive and significant ($1.622$, $p<0.001$), indicating stronger outward shifts in high-exposure cities.
+\item \textit{Reference files:}
+\\ Regression output: \texttt{outputs/city\_exposure/nontech\_exposure\_did\_regression\_summary.txt}
+\\ Exposure classification figure: \texttt{outputs/city\_exposure/city\_tech\_share\_classification.png}
+\\ Non-tech trend figure: \texttt{outputs/city\_exposure/nontech\_high\_low\_exposure\_trend.png}
+\\ Generated by: \texttt{scripts/main/project2\_exposure.py}, \texttt{scripts/main/project2\_exposure\_did.py}
+\item \textbf{Triple-difference robustness:} nontech$\times$post$\times$high-exposure estimate is small and not significant ($0.245$, $p=0.727$).
+\item \textit{Reference files:}
+\\ Regression output: \texttt{outputs/city\_exposure/triple\_diff\_exposure\_summary.txt}
+\\ Generated by: \texttt{scripts/main/project2\_exposure\_did.py}
+\end{itemize}
+
+\section{Conclusion and Future Directions}
+\begin{itemize}[leftmargin=*]
+\item Current evidence does not show statistically significant SF-specific displacement of non-tech workers relative to tech workers in the baseline design.
+\item Some broader exposure comparisons indicate differential post-period spatial shifts across city exposure groups, but non-tech-specific triple-difference evidence is weak.
+\item Future work: richer controls (income, household structure), alternative downtown reference points, migration margin decomposition, and sensitivity to occupation definitions.
+\end{itemize}
+
+\section{References Placeholder}
+Include all cited empirical and methodological references in the final paper bibliography.
+
+\textbf{Project file references to cite in writing workflow (not bibliography citations):}
+\begin{itemize}[leftmargin=*]
+\item File map for active scripts and outputs: \texttt{README.md}, \texttt{docs/NEW\_ANALYSIS\_FILES.md}
+\item Graph provenance map: \texttt{docs/GRAPH\_INDEX.md}
+\item Optional V2 robustness outputs: \texttt{scripts/main/did\_v2/run\_did\_v2.py}, \texttt{outputs/did\_v2/}
+\end{itemize}
+
+\end{document}
