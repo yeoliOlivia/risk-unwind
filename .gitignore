@@ -216,3 +216,23 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- risk-unwind ---
+# PDFs (papers, example proposals, compiled LaTeX output)
+*.pdf
+
+# CRSP is licensed data: never commit it (the repo is public).
+data/raw/*
+!data/raw/.gitkeep
+data/processed/
+
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+
+.DS_Store

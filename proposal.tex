@@ -1,0 +1,308 @@
+% CPSC 4900 Senior Project Proposal -- Olivia Ye, Fall 2026
+% Structure follows the example CPSC proposals: background, related work,
+% project description, evaluation, timeline, deliverables, references.
+
+\documentclass[11pt]{article}
+\usepackage[margin=0.85in]{geometry}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{listings}
+\usepackage[compact]{titlesec}
+\usepackage{multicol}
+\usepackage[hidelinks]{hyperref}
+
+\titlespacing{\section}{0pt}{4pt}{1pt}
+\setlist{itemsep=1pt, topsep=2pt, parsep=0pt}
+\setlength{\parskip}{0pt}
+\linespread{0.97}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  frame=single, framesep=3pt, xleftmargin=6pt,
+  columns=fullflexible, keepspaces=true,
+  aboveskip=4pt, belowskip=4pt
+}
+
+\title{\vspace{-1.8em}Risk Unwind: Typed Exception Handling for\\ Portfolio Risk Management}
+\author{Olivia Ye \\ \small Advised by Professor Stephen Slade}
+\date{CPSC 4900 \\ Fall 2026}
+
+\begin{document}
+\maketitle
+\vspace{-2.2em}
+
+\section{Introduction}
+
+Programming languages have a mature, well-defined way of dealing with things going wrong:
+raise an exception, match it to a handler, resolve it, and if nothing can handle it, stop and
+escalate. Portfolio risk management has the detection half of that machinery and not the
+dispatch half. Commercial systems notice limit breaches reliably and route them to a person;
+nothing decides, from the \emph{kind} of problem, what the right response is.
+
+\begin{lstlisting}[language=Python]
+try:
+    portfolio.hold()
+except (ConcentrationBreach, VaRBreach) as breaches:
+    propose(solve(cost, subject_to=every_limit))  # net, then solve once
+except DataFault as f:
+    quarantine(f.feed); mark_stale(f.metrics)     # the numbers aren't real
+except ModelIntegrityFault as f:
+    switch_to(simpler_measure); flag(f.model)     # a broken model is worse
+except LiquidityFault as b:
+    raise Uncatchable(b) from b
+finally:
+    verify(portfolio)                             # every path, including failure
+\end{lstlisting}
+
+Four branches, four genuinely different responses, and only one of them trades. That is the
+claim: not that breaches can be fixed automatically, but that \emph{what kind of problem it
+is} determines whether fixing is even the right move.
+
+\section{Background}
+
+A risk limit is a promise about a portfolio: no more than a fixed share in any one name, no
+more than a certain loss on a bad day, no position larger than the market can absorb. Markets
+move, so these promises break constantly without anyone doing anything wrong: an assumption
+the system relied on is no longer true, which is exactly what an exception is. The
+correspondence is structural --- the \emph{type} is what kind of promise broke,
+\emph{uncaught} is escalation with the full trace, \emph{finally} verifies the repair --- but
+four properties of financial risk make it harder than a direct port:
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Breaches cascade.} A stock sits inside a sector inside a region, so one
+  oversized position trips three limits: three alarms, one event.
+\item \textbf{Breaches can genuinely offset.} Two positions may each breach alone while
+  partially hedging each other, leaving the combined book inside its bound. Subadditivity is
+  one of the four axioms of a coherent risk measure~\cite{artzner1999}: risk is formally not
+  additive. Cascades are structural, offsets mathematical, and they need different handling.
+\item \textbf{Some breaches cannot be fixed.} If a position is oversized and its market
+  has dried up, no trade solves the problem.
+\item \textbf{Some breaches must not be fixed.} If the feed has died or the model has
+  broken down, the breach may not be real, and trading on it is worse than doing nothing.
+  The correct response is to stop --- which no optimiser will ever choose, because stopping
+  is not in its vocabulary.
+\end{enumerate}
+
+\section{The Hierarchy, and Why It Is the Contribution}
+
+Risk limits today live in flat lists: one rule per limit, one response per rule, and the
+response is nearly always ``tell someone.'' Exceptions form a family tree instead, and that
+structure is what does the work.
+
+\begin{lstlisting}[basicstyle=\ttfamily\scriptsize]
+RiskException
+|-- LimitBreach                      |-- DataFault
+|   |-- ConcentrationBreach          |-- ModelIntegrityFault
+|   |   |-- SingleNameBreach         \-- LiquidityFault
+|   |   \-- SectorBreach
+|   \-- VaRBreach
+\end{lstlisting}
+
+A handler is written at whatever level the response is actually the same --- one
+\texttt{ConcentrationBreach} handler covers every sector and instrument --- and the type raised
+selects it, so \emph{what to do} is decided by the taxonomy rather than by the check that
+detected the problem.
+
+\begin{center}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{8.8cm}@{}}
+\toprule
+\textbf{Type} & \textbf{Response} \\
+\midrule
+\texttt{Concentration}/ \texttt{VaRBreach} & Net the breaches, then compute one joint set
+of trades clearing all of them at least cost. \textbf{Trades.} \\
+\texttt{DataFault} & Quarantine the feed, mark dependent metrics stale, stop.
+\textbf{Trades nothing} --- any trade would act on fiction. \\
+\texttt{ModelIntegrity\-Fault} & Fall back to a simpler, robust measure; flag the model
+for validation. \textbf{Trades nothing} until the fallback is in place. \\
+\texttt{LiquidityFault} & No trade fixes this. Propagate outward and escalate with the
+causal chain. \textbf{Cannot trade.} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+An optimiser knows exactly one move: trade. Hand it a dead price feed and it will confidently
+rebalance against numbers that are not real. This is an exception system rather than a solver
+with monitors bolted to the front precisely because three of the four branches resolve by
+\emph{declining to act}, and something must decide which branch applies.
+
+\textbf{Proposes, does not execute.} Every handler emits a proposal --- the trade, its cost,
+the breaches it clears, the reasoning --- for a person to approve, since Rule 15c3-5 requires
+risk controls to sit under a broker-dealer's direct and exclusive control~\cite{sec15c35}.
+Resolution is not autonomous; what changes is the message to that person, from \emph{``four
+limits broke, go work out what to do''} to \emph{``these four alarms are one event, here is
+the smallest trade that clears it, and here is what it will not fix.''}
+
+\section{Related Work}
+
+Detection is a solved commercial problem, and any proposal claiming otherwise will not survive
+a reader who works in the industry. BlackRock's Aladdin checks compliance at order creation,
+at execution and after the trade, and runs a workflow in which violations are assigned,
+commented on and aged~\cite{aladdin}; pre-trade controls are legally required for
+broker-dealers with market access~\cite{sec15c35}. But at the moment of a breach these
+systems hand it to a human: that is detection and \emph{reporting}, not exception
+\emph{handling} --- no handler computes a resolution, and the \texttt{except} block is an
+inbox.
+
+Automated remediation is not unclaimed either. US patents 7,636,686 and 7,930,239~\cite{patent686}
+resolve a restriction violation by executing a stored rule that substitutes another security or
+cash for the restricted holding, and 7,599,869 describes pre-trade compliance checking with an
+override path and an aged exception queue. But that is per-restriction substitution at order
+time --- one rule, one violation, one response --- not reasoning about several live breaches
+together, and not deciding from the type not to trade at all.
+
+The computer science lineage supplies the machinery: Goodenough on what a handler must guarantee
+and the difference between resuming and unwinding~\cite{goodenough1975}, Russell et al.\ on
+exception patterns in business processes~\cite{russell2006}, and MAPE-K~\cite{kephart2003} for
+the monitor--detect--plan--act shape. Basel already defines seven operational risk event
+types~\cite{basel}, so this project is not first to classify risk events --- it argues that
+categories built for operational losses do not fit limit breaches.
+
+That leaves four claims, and only four. \textbf{(1)} Dispatch is by type, so three of four
+classes resolve by refusing to trade --- which no optimiser, and none of the patents above,
+can do. \textbf{(2)} Breaches are reasoned about jointly, so cascaded alarms collapse to one
+action and offsetting ones to none. \textbf{(3)} When no trade can fix the problem, that
+arrives as a mathematical result, not a case someone remembered to write. \textbf{(4)} The
+evaluation is reproducible, on injected ground truth rather than a private book.
+
+\section{System Design}
+
+\textbf{Main goal:} build and evaluate a typed exception handling system for a single
+equity portfolio, which raises typed exceptions from replayed market data, dispatches on
+type, computes a minimal joint repair where one is warranted, declines to trade where it
+is not, and escalates what it cannot fix.
+
+\textbf{Testable hypothesis:} typed dispatch plus joint netting resolves a given set of
+risk events with strictly less trading than a per-breach handler, and avoids the trades a
+type-free optimiser makes on corrupted inputs, with no loss in detection accuracy.
+
+Six stages, built in this order because each is only testable once the one before it
+exists. Nothing here is a neural network; no part of the project involves one.
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{S0 --- Replay.} Historical data on a simulated clock, so a month of trading runs
+  in seconds, plus a harness that \emph{injects} faults deliberately: break a limit, cut a
+  feed, make two breaches coincide. Because the faults are deliberate the correct answer is
+  known, which is the only reason anything downstream can be graded.
+\item \textbf{S1 --- State.} On each tick, update value, exposures and risk measures ---
+  bookkeeping, but every later stage reads from it.
+\item \textbf{S2 --- Typed monitors.} Independent monitors, each raising a \emph{typed}
+  exception rather than a generic alert and reporting how far out of bounds, not merely that
+  something broke. A monitor never decides what to do --- that separation is Goodenough's
+  central idea, and it lets remediation policy change without touching a detector.
+\item \textbf{S3 --- Net, decode, link.} Recompute risk with offsetting positions combined and
+  discard breaches that disappear; match the survivors against per-cause fingerprints,
+  tolerating a missing or spurious alarm, following practice in
+  telecommunications~\cite{jakobson1993}; record causal chains. Netting must precede decoding,
+  or the decoder is fed alarms that were never real.
+\item \textbf{S4 --- Repair.} Reached only for \texttt{LimitBreach} types; if a data or
+  model fault is live, dispatch never arrives here, which is the point of having types.
+  Repair minimises trading cost subject to every active limit holding afterwards and no trade
+  exceeding what the market can absorb. A worked \emph{cascade}: in a \$10M portfolio capped
+  at 5\% per holding and 25\% per sector, a chip stock at \$780k is \$280k over while
+  semiconductors at 27\% are \$200k over --- but trimming the stock drags the sector to
+  24.2\%, so \$280k of trading clears both, not \$480k. Every limit enters as a constraint,
+  not only the broken ones, which stops a repair from creating a fresh breach; and when they
+  cannot jointly be met, the solver proves it.
+\item \textbf{S5 --- Verify and escalate.} Re-run the monitors on the proposed portfolio;
+  anything still breached, plus anything infeasible, goes to a person with the full trace.
+\end{itemize}
+
+A solver is used rather than a learned model because a breach is arithmetic and the repair a
+constrained optimisation: the answer provably satisfies every constraint, is auditable as model
+risk governance requires, and proves infeasibility when no repair exists.
+
+\section{Evaluation}
+
+Eight constructed scenarios, each with a known correct answer, layered on replayed data from
+real stress periods so market behaviour is genuine even though the injected faults are not.
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{A corrupted feed alongside a genuine breach --- the headline test.} The correct
+  action is to trade \emph{nothing} and freeze; a system without types rebalances against
+  fabricated numbers. Only typed dispatch wins this one, and the failure mode is catastrophic
+  rather than merely wasteful.
+\item A single isolated breach (detected at all?); two unrelated breaches at once (two
+  independent repairs); a containment cascade, stock inside sector inside region (one fix, not
+  three); two genuinely offsetting breaches (one fix, or none); a liquidity constraint making
+  another repair infeasible (is the link found?); a breach with no feasible repair (does it
+  escalate rather than fail quietly?); a model integrity fault during live breaches (does it
+  fall back?).
+\end{enumerate}
+
+Three baselines: a plain limit checker with no correlation logic; a handler repairing every
+breach separately, which should visibly over-trade on the cascade; and a bare optimiser with no
+type system, which treats every alarm as a trade signal and fails hardest on scenario 1.
+Metrics, in order: \textbf{dispatch correctness} (right type raised, right handler fired), then
+detection and false-alarm rates, correct-cause identification, repair cost against the optimum,
+latency, and false escalation rate.
+
+\textbf{Scope, stated deliberately:} one long/short equity portfolio; simulated time, not
+production streaming infrastructure; equities only, no non-linear payoffs; a solver, not a
+learned policy; proposals reviewed by a person, never autonomous execution; roughly six leaf
+types, where the test of the tree is that every split is defensible, not complete.
+
+\section{Timeline}
+
+{\small
+\begin{itemize}[leftmargin=*]
+\item \textbf{Sep.\ 22} --- Proposal submitted to advisor for review and approval.
+  \textbf{Sep.\ 29} --- literature survey complete: a systematic search of IEEE Xplore, the
+  ACM Digital Library and SSRN, and the three patents read in full, before any novelty claim
+  is written. Dataset selected. Establish how often genuine offsets survive in practice,
+  since many systems net at the point of \emph{measurement} --- this sets how much of S3 is
+  needed.
+\item \textbf{Oct.\ 6} --- S0 replay and fault injection working; S1 reads from it.
+  \textbf{Oct.\ 13} --- hierarchy fixed, S2 typed monitors, scenarios 2--3 pass end to end;
+  midterm progress report submitted.
+\item \textbf{Oct.\ 20} --- Dispatch layer; scenarios 1 and 8 pass (declines to trade on a
+  corrupted feed; falls back on a model fault). \textbf{Oct.\ 27} --- S3 netting, decoding
+  and linking; scenario 4 shows a measurable trade-count difference against the per-breach
+  baseline.
+\item \textbf{Nov.\ 10} --- S4 solver with infeasibility reporting; scenarios 5--7 pass.
+  \textbf{Nov.\ 17} --- S5 verification, proposal objects and escalation traces; full
+  pipeline runs unattended. \textbf{Nov.\ 24} --- all three baselines run, every metric
+  collected.
+\item \textbf{Dec.\ 1} --- results compiled, poster and presentation drafted.
+  \textbf{Dec.\ 8} --- draft to advisor. \textbf{Dec.\ 14} --- final report submitted.
+\end{itemize}}
+
+\section{Deliverables}
+
+{\small
+\begin{enumerate}[leftmargin=*]
+\item Source code for the full S0--S5 pipeline as a public GitHub repository, with the exception
+  hierarchy and dispatch table documented as a standalone artifact.
+\item Fault injection harness, the eight evaluation scenarios and the three baselines, all
+  reproducible from a single command, plus a results notebook holding every metric table and
+  figure behind the final report.
+\item Poster, final written report, ten-minute video presentation, and both documents added to
+  the CPSC 4900 website.
+\end{enumerate}}
+
+\scriptsize
+\begin{multicols}{2}
+\begin{thebibliography}{9}
+\setlength{\itemsep}{0pt}
+\bibitem{goodenough1975} J. B. Goodenough. Exception handling: issues and a proposed notation.
+  \emph{Communications of the ACM}, 18(12):683--696, 1975.
+\bibitem{russell2006} N. Russell, W. M. P. van der Aalst, and A. H. M. ter Hofstede. Workflow
+  exception patterns. In \emph{CAiSE 2006}, LNCS 4001:288--302, 2006.
+\bibitem{artzner1999} P. Artzner, F. Delbaen, J.-M. Eber, and D. Heath. Coherent measures of
+  risk. \emph{Mathematical Finance}, 9(3):203--228, 1999.
+\bibitem{kephart2003} J. O. Kephart and D. M. Chess. The vision of autonomic computing.
+  \emph{Computer}, 36(1):41--50, 2003.
+\bibitem{sec15c35} U.S. SEC. Risk Management Controls for Brokers or Dealers with Market
+  Access, 17 C.F.R. \S 240.15c3-5. Rel.\ 34-63241, adopted Nov.\ 3, 2010; 75 Fed.\ Reg.\ 69791.
+\bibitem{patent686} Automated actions based on restrictions. U.S. Patents 7,636,686 and
+  7,930,239, CheckFree Corp. See also U.S. Patent 7,599,869.
+\bibitem{basel} Basel Committee on Banking Supervision. Operational risk event types. % TODO: pin exact document -- Basel II Annex 9, carried into the
+  % consolidated Basel Framework (OPE).
+\bibitem{jakobson1993} G. Jakobson and M. Weissman. Alarm correlation. \emph{IEEE Network},
+  7(6):52--59, 1993. % TODO: volume/issue/pages not yet verified.
+\bibitem{aladdin} BlackRock. Aladdin compliance and risk management platform.
+  % TODO: cite the specific product page or documentation, with an access date.
+\end{thebibliography}
+\end{multicols}
+
+\end{document}

@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "riskunwind"
+version = "0.1.0"
+description = "Typed exception handling for portfolio risk management (CPSC 4900)"
+requires-python = ">=3.10"
+dependencies = ["numpy", "pandas", "matplotlib", "wrds"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
