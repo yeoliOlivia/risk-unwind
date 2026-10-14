@@ -18,12 +18,12 @@ CRSP is licensed: `data/raw/` is gitignored, never commit it.
 
 ```bash
 # needs a WRDS login (the wrds package prompts for it; credentials are never stored here)
-.venv/bin/python scripts/pull_crsp.py --tag covid2020 --start 2020-02-03 --end 2020-05-29
-.venv/bin/python scripts/build_portfolios.py --panel data/raw/crsp_covid2020.csv.gz
-.venv/bin/python scripts/run_state.py --panel data/raw/crsp_covid2020.csv.gz --portfolio data/portfolios/cascade.csv
+.venv/bin/python builds/pull_crsp.py --tag covid2020 --start 2020-02-03 --end 2020-05-29
+.venv/bin/python builds/build_portfolios.py --panel data/raw/crsp_covid2020.csv.gz
+.venv/bin/python builds/run_state.py --panel data/raw/crsp_covid2020.csv.gz --portfolio data/portfolios/cascade.csv
 ```
 
-No WRDS yet? `scripts/make_synthetic.py` writes a same-schema fake panel to `data/raw/crsp_synthetic.csv.gz`.
+No WRDS yet? `builds/make_synthetic.py` writes a same-schema fake panel to `data/raw/crsp_synthetic.csv.gz`.
 
 ## Layout
 

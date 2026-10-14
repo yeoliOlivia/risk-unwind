@@ -1,14 +1,13 @@
 """
-Grabs daily CRSP  stock data from WRDS
+Takes in daily stock data (from WRDS)
+
+Returns df with col: date, permno, ticker, siccd, price, ret, volume, shares_out
 """
 from __future__ import annotations
 from datetime import date, timedelta
 import pandas as pd
 
-COLUMNS = ["date", "permno", "ticker", "siccd", "price", "ret", "volume", "shares_out"]
-
-# shrcd 10/11 is for US common stock
-# exchcd 1/2/3 is NYSE/AMEX/NASDAQ
+COLS = ["date", "permno", "ticker", "siccd", "price", "ret", "volume", "shares_out"]
 
 LEGACY_SQL = """
 select a.date, a.permno, b.ticker, b.siccd, a.prc, a.ret, a.vol, a.shrout
@@ -16,13 +15,12 @@ from crsp.dsf a
 join crsp.msenames b
   on a.permno = b.permno and b.namedt <= a.date and a.date <= b.nameendt
 where a.date between %(start)s and %(end)s
-  and b.shrcd in (10, 11) and b.exchcd in (1, 2, 3)
+  and b.shrcd in (10, 11) and b.exchcd in (1, 2, 3) 
   {permno_filter}
 """
-# Data cols from pull:
-#     date, permno, ticker, siccd, price, ret, volume, shares_out
+# keeps shrcd  = 10/11 (common stock) and exchcd = 1/2/3 (NYSE, AMEX, NASDAQ)
 
-# 2024 file
+# 2024 file pull
 V2_SQL = """
 select dlycaldt, permno, ticker, siccd, dlyprc, dlyret, dlyvol, shrout
 from crsp.dsf_v2
@@ -33,25 +31,16 @@ where dlycaldt between %(start)s and %(end)s
   {permno_filter}
 """
 
-
 def connect():
     import wrds
     return wrds.Connection()
 
-
 def detect_table(db) -> str:
-    """Checks for version of table (dsf_v2 or dsf)
-
-    Two daily file types:
-    - legacy `crsp.dsf` 
-    - 2024 format `crsp.dsf_v2`
-    """
     tables = set(db.list_tables(library="crsp"))
     for name in ("dsf_v2", "dsf"):
         if name in tables:
             return name
     raise RuntimeError("This WRDS account has neither crsp.dsf_v2 nor crsp.dsf.")
-
 
 def normalize_legacy(raw: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame({
@@ -63,8 +52,7 @@ def normalize_legacy(raw: pd.DataFrame) -> pd.DataFrame:
         "ret": raw["ret"].where(raw["ret"] >= -1), # missing ret are negative
         "volume": raw["vol"],
         "shares_out": raw["shrout"],  # thousands
-    })[COLUMNS]
-
+    })[COLS]
 
 def normalize_v2(raw: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame({
@@ -76,17 +64,14 @@ def normalize_v2(raw: pd.DataFrame) -> pd.DataFrame:
         "ret": raw["dlyret"].where(raw["dlyret"] >= -1),
         "volume": raw["dlyvol"],
         "shares_out": raw["shrout"],  # in thousands
-    })[COLUMNS]
-
+    })[COLS]
 
 def run_sql(db, sql: str, params: dict) -> pd.DataFrame:
     """
-    Query WRDS connection and return a df
-
-    - pandas 3 only accepts SQLAlchemy 2.x 
-    - wrds needs SQLAlchemy 1.4
+    Opens WRDS connection 
     """
     conn = db.engine.raw_connection()
+    # wrds needs SQLAlchemy 1.4, pandas 3 takes SQLAlchemy 2.x 
     try:
         cur = conn.cursor()
         cur.execute(sql, params)
@@ -95,9 +80,14 @@ def run_sql(db, sql: str, params: dict) -> pd.DataFrame:
     finally:
         conn.close()
 
-
 def query(db, table: str, start: date, end: date, permnos: list[int] | None = None) -> pd.DataFrame:
-    sql, normalize = (V2_SQL, normalize_v2) if table == "dsf_v2" else (LEGACY_SQL, normalize_legacy)
+    if table == "dsf_v2":
+        sql = V2_SQL
+        normalize_func = normalize_v2
+    else:
+        sql = LEGACY_SQL
+        normalize_func = normalize_legacy
+
     params = {"start": str(start), "end": str(end)}
     permno_filter = ""
     if permnos is not None:
@@ -105,12 +95,11 @@ def query(db, table: str, start: date, end: date, permnos: list[int] | None = No
         permno_filter = f"and {permno_col} in %(permnos)s"
         params["permnos"] = tuple(permnos)
     raw = run_sql(db, sql.format(permno_filter=permno_filter), params)
-    return normalize(raw)
-
+    return normalize_func(raw)
 
 def pull(db, start: date, end: date, n_stocks: int = 100) -> tuple[pd.DataFrame, str]:
     """
-    Pulls a number of largest US common stocks by market cap daily from start to end
+    Grab largest US common stocks by market cap daily from start to end
     """
     table = detect_table(db)
 

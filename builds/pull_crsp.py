@@ -2,7 +2,7 @@
 Takes CRSP data from WRDS and puts it into data/raw/
 
 To run:
-    python scripts/pull_crsp.py --tag 2020q1 --start 2020-01-02 --end 2020-03-31
+    python builds/pull_crsp.py --tag 2020q1 --start 2020-01-02 --end 2020-03-31
 """
 import argparse
 from datetime import date

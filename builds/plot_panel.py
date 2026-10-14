@@ -1,7 +1,7 @@
 """
 Plotting raw data
 
-To run: python scripts/plot_panel.py data/raw/crsp_2020q1.csv.gz
+To run: python builds/plot_panel.py data/raw/crsp_2020q1.csv.gz
 """
 import argparse
 from pathlib import Path
