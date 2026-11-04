@@ -14,8 +14,8 @@ from riskunwind import crsp_data
 def check(panel: pd.DataFrame) -> list[str]:
     """Returns a list of problems. Empty list = all good"""
     problems = []
-    if list(panel.columns) != crsp_data.COLUMNS:
-        problems.append(f"columns are {list(panel.columns)}, expected {crsp_data.COLUMNS}")
+    if list(panel.columns) != crsp_data.COLS:
+        problems.append(f"columns are {list(panel.columns)}, expected {crsp_data.COLS}")
         return problems  # the checks below need the right columns
     if panel.duplicated(["date", "permno"]).any():
         problems.append("duplicate (date, permno) rows")

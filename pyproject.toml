@@ -9,5 +9,12 @@ description = "Typed exception handling for portfolio risk management (CPSC 4900
 requires-python = ">=3.10"
 dependencies = ["numpy", "pandas", "matplotlib", "wrds"]
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

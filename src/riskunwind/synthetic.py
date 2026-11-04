@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 # bring in col names for consistency 
-from riskunwind.crsp_data import COLUMNS
+from riskunwind.crsp_data import COLS
 
 SIC_MIX = [         # code, count
     (3674, 20),     # semiconductors - most # here for cascade and sector tests
@@ -93,4 +93,4 @@ def make_panel(start: str = "2019-01-01", end: str = "2020-05-29", seed: int = 0
         "volume": volume.ravel(),
         "shares_out": np.tile(shares_out, n_days),
     })
-    return panel[COLUMNS]
+    return panel[COLS]
