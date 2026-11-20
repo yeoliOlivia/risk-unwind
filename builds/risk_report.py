@@ -1,5 +1,5 @@
 """
-Writes a text risk report for each portfolio into data/reports/
+Writes a text and an HTML risk report for each portfolio into data/reports/
 
 To run (after build_portfolios.py):
 1. python builds/risk_report.py --panel data/raw/crsp_2020q1.csv.gz
@@ -9,6 +9,7 @@ OR pick the books
 import argparse
 from pathlib import Path
 from riskunwind.market import MarketData
+from riskunwind.html_report import html_report
 from riskunwind.portfolio import Portfolio
 from riskunwind.report import text_report
 
@@ -29,11 +30,13 @@ def main() -> None:
     market = MarketData.from_csv(a.panel)
     a.out_dir.mkdir(parents=True, exist_ok=True)
     for path in paths:
-        report = text_report(Portfolio.from_csv(path), market)
-        out = a.out_dir / f"{path.stem}.txt"
-        out.write_text(report)
+        pf = Portfolio.from_csv(path)
+        report = text_report(pf, market)
+        txt, html = a.out_dir / f"{path.stem}.txt", a.out_dir / f"{path.stem}.html"
+        txt.write_text(report)
+        html.write_text(html_report(pf, market))
         print(report)
-        print(f"wrote {out}\n")
+        print(f"wrote {txt}\nwrote {html}\n")
 
 
 if __name__ == "__main__":

@@ -3,6 +3,8 @@ Testing the text risk report
 """
 import pandas as pd
 # importing from other files
+from riskunwind.html_report import SHOW_DAYS, html_report, title
+from riskunwind.metrics import daily_metrics
 from riskunwind.report import runs, text_report
 
 # Decision of what type of tests to create were done in conjunction/consultation with Claude.
@@ -24,3 +26,21 @@ def test_report_lists_every_metric(baseline, market):
     for label in ["1-day VaR (95%)", "Days to liquidate", "Gross exposure", "Drawdown",
                   "Exp. shortfall (95%)", "1-day volatility", "Cash buffer"]:
         assert label in report
+
+def test_title_case():
+    assert title("cascade") == "Cascade"
+    assert title("max stock weight vs the limit") == "Max Stock Weight vs the Limit"
+    assert title("1-day VaR (95%)") == "1-day VaR (95%)"
+
+def test_html_report_content(cascade, market):
+    page = html_report(cascade, market)
+    assert page.startswith("<!doctype html>")
+    assert "<h1>Cascade</h1>" in page
+    assert "Semiconductors" in page  # breach driver
+    assert page.count("data:image/png;base64,") == 2  # NAV chart + limits chart
+
+def test_html_daily_table_is_collapsed(cascade, market):
+    page = html_report(cascade, market)
+    n_days = len(daily_metrics(cascade, market))
+    assert page.count("<tr class=more>") == n_days - SHOW_DAYS
+    assert f"Show all {n_days} days" in page
