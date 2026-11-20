@@ -7,9 +7,10 @@ import pytest
 from riskunwind import builders
 from riskunwind.config import Params
 from riskunwind.market import MarketData
-from riskunwind.metrics import MIN_VAR_DAYS, cash_buffer, daily_metrics, days_to_liquidate, historical_var
+from riskunwind.metrics import (MIN_VAR_DAYS, cash_buffer, daily_metrics, days_to_liquidate, drawdown,
+                                historical_risk, historical_var)
 from riskunwind.portfolio import PORTFOLIO_COLS, Portfolio
-from riskunwind.state import daily_state
+from riskunwind.state import DailyState, daily_state
 
 # one stock, price fixed at $10, returns and volume set by hand
 def one_stock_market(rets, volume=1000.0):
@@ -36,6 +37,30 @@ def test_var_hand_worked():
     pf = one_stock_book(market, 100)
     var = historical_var(daily_state(pf, market), market)
     assert var.iloc[-1] == pytest.approx(0.01905)
+
+def test_shortfall_and_volatility_hand_worked():
+    # same 20 days as above: only -2.0% is beyond the 1.905% cutoff --> shortfall 2.0%
+    # volatility = sample SD of 0.1%..2.0% = sqrt(35) / 1000
+    market = one_stock_market([-k / 1000 for k in range(1, 21)])
+    pf = one_stock_book(market, 100)
+    risk = historical_risk(daily_state(pf, market), market).iloc[-1]
+    assert risk["expected_shortfall"] == pytest.approx(0.020)
+    assert risk["volatility"] == pytest.approx(35 ** 0.5 / 1000)
+
+def test_shortfall_at_least_var(baseline, market):
+    m = daily_metrics(baseline, market)
+    assert (m["expected_shortfall"] >= m["var"]).all()
+
+def test_drawdown_hand_worked():
+    # NAV 100 -> 110 -> 99 -> 121: 99 is 10% below the 110 peak
+    nav = pd.Series([100.0, 110.0, 99.0, 121.0])
+    state = DailyState(values=None, nav=nav, weights=None, sector_weights=None)
+    assert drawdown(state).tolist() == pytest.approx([0.0, 0.0, 0.1, 0.0])
+
+def test_exposure_at_entry(cascade, market):
+    m = daily_metrics(cascade, market).iloc[0]
+    assert m["gross"] == pytest.approx(1.2, abs=0.01)
+    assert m["net"] == pytest.approx(0.4, abs=0.01)
 
 def test_var_needs_enough_history():
     market = one_stock_market([0.01] * (MIN_VAR_DAYS - 1))
